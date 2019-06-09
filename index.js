@@ -10,6 +10,9 @@ app.use(cors())
 const bodyParser = require('body-parser')
 app.use(bodyParser.json())
 
+// static
+app.use(express.static('build'))
+
 // morgan
 const morgan = require('morgan')
 
