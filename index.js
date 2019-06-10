@@ -1,23 +1,28 @@
 
+require('dotenv').config()
 const express = require('express')
 const app = express()
 
-// cors
-const cors = require('cors')
 
-app.use(cors())
+// static
+app.use(express.static('build'))
+
 // bodyparser
 const bodyParser = require('body-parser')
 app.use(bodyParser.json())
 
-// static
-app.use(express.static('build'))
+
 
 // morgan
 const morgan = require('morgan')
 
 // token for body
 morgan.token('body', function (req, res) {  return req.method!=='POST' ? '' : JSON.stringify(req.body)  })
+
+// cors
+const cors = require('cors')
+app.use(cors())
+
 
 
 const logginFunction = function (tokens, req, res) {
@@ -32,6 +37,10 @@ const logginFunction = function (tokens, req, res) {
   }
 
 app.use(morgan(logginFunction))
+
+// db
+
+const Person = require('./models/person')
 
 
 // Data
@@ -59,80 +68,112 @@ let persons =  [
     ]
   
 // API 
-app.get('/API/persons', (request, response) => {
-    response.json(persons)
+app.get('/API/persons', (request, response ,next) => {
+    Person.find({}).then(persons => response.json(persons)).catch(error => next(error))
   })
 
 // Single
-app.get('/API/persons/:id', (request, response) => {
-    const id = Number(request.params.id)
-    const person = persons.find(p => p.id === id)
+app.get('/API/persons/:id', (request, response, next) => {
+
     
-    if (!person) {
+    Person.findById(request.params.id).then(person => {
+
+      if (person) {
+        response.json(person.toJSON())
+      } else {
         response.status(404).end()
-    } else {
-        response.json(person)
-    }
+      }
+    }).catch(error => next(error))
 
 })
 
 // Delete
-app.delete('/API/persons/:id', (request, response) => {
-    const id = Number(request.params.id)
-    const person = persons.find(p => p.id === id)
+app.delete('/API/persons/:id', (request, response, next) => {
 
-    if (!person) {
-        response.status(404).end()
-    } else {
-        persons = persons.filter(p => p.id !== id)
-        response.status(204).end()
-    }
+
+    Person.findByIdAndDelete(request.params.id).then(person => {
+      console.log('deleted',person)
+      response.status(204).end()
+    }).catch(error => next(error))
+
 
 })
 
+// Create new 
 
-app.post('/api/persons',(request,response) => {
+app.post('/api/persons',(request,response, next) => {
 
-    
-    let isNameAlready = persons.find(p => p.name === request.body.name) !== undefined
-    let isNumberAlready = persons.find(p => p.number === request.body.number) !== undefined
-   
     // Check that name and number is posted
     if (!request.body.name | !request.body.number) {
 
-        response.status(400).json({'error': 'must provide name and number'})
+    response.status(400).json({'error': 'must provide name and number'})
 
-    } else  if (isNameAlready) { // Check for existing listings
+    }  
+    // Try to find person and if found, update. Else create new.
+    Person.findOneAndUpdate({ name: request.body.name}
+                  ,{ name: request.body.name, number: request.body.number}
+                  ,{ new: true, upsert: true} ) 
+          .then(updatedPerson => {
 
-        response.status(400).json({'error': 'name already listed'})
+            console.log('updated/created', updatedPerson)
+            response.json(updatedPerson.toJSON())
+              
+    }).catch(error => next(error))
+})
 
-    } else if (isNumberAlready) {
+// Update
 
-        response.status(400).json({'error': 'number already listed'})
 
-    } else { // All checks passed
-        let newPerson =      {
-        name: request.body.name,
-        number: request.body.number,
-        id:  Math.floor(Math.random() * Math.floor(9999999))
+app.put('/api/persons/:id',(request,response, next) => {
 
-        }
+  console.log('updating',request.body.name,request.body.number)
 
-        persons.push(newPerson)
+ 
+  // Try to find person and if found, update. Else create new.
+  Person.findByIdAndUpdate(request.body.id
+                ,{ name: request.body.name, number: request.body.number}
+                ,{ new: true, upsert: false, useFindAndModify: false} ) 
+        .then(updatedPerson => {
 
-        response.json(newPerson)
-    }
+          console.log('updated', updatedPerson)
+          response.json(updatedPerson.toJSON())
+            
+  }).catch(error => next(error))
 
 })
 
 // info
-app.get('/info', (request, response) => {
+app.get('/info', (request, response, next) => {
     console.log(request)
 
-    let responsetext = '<p>Phonebook has info for ' + persons.length + ' persons.</p>' 
-    responsetext += '<p>' + Date() + '</p>'    
-    response.send(responsetext)
+
+    Person.find({}).then(persons => {
+      let responsetext = '<p>Phonebook has info for ' + persons.length + ' persons.</p>' 
+      responsetext += '<p>' + Date() + '</p>'    
+      response.send(responsetext)
+
+    }).catch(error => next(error))
+
+    
   })
+
+
+// error handler
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message)
+
+  if (error.name === 'CastError' && error.kind == 'ObjectId') {
+    return response.status(400).send({ error: 'malformatted id' })
+  }  else if (error.name === 'ValidationError') {
+    return response.status(400).json({ error: error.message })
+  }
+
+  next(error)
+}
+
+app.use(errorHandler)
+
 
 // Mount
 
