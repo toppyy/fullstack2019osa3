@@ -43,30 +43,7 @@ app.use(morgan(logginFunction))
 const Person = require('./models/person')
 
 
-// Data
-let persons =  [
-      {
-        "name": "Arto Hellas",
-        "number": "040-123456",
-        "id": 1
-      },
-      {
-        "name": "Ada Lovelace",
-        "number": "39-44-5323523",
-        "id": 2
-      },
-      {
-        "name": "Dan Abramov",
-        "number": "12-43-234345",
-        "id": 3
-      },
-      {
-        "name": "Mary Poppendieck",
-        "number": "39-23-6423122",
-        "id": 4
-      }
-    ]
-  
+
 // API 
 app.get('/API/persons', (request, response ,next) => {
     Person.find({}).then(persons => response.json(persons)).catch(error => next(error))
@@ -103,22 +80,13 @@ app.delete('/API/persons/:id', (request, response, next) => {
 
 app.post('/api/persons',(request,response, next) => {
 
-    // Check that name and number is posted
-    if (!request.body.name | !request.body.number) {
+    Person.create({ name: request.body.name, number: request.body.number})
+          .then(createdPerson => {
 
-    response.status(400).json({'error': 'must provide name and number'})
-
-    }  
-    // Try to find person and if found, update. Else create new.
-    Person.findOneAndUpdate({ name: request.body.name}
-                  ,{ name: request.body.name, number: request.body.number}
-                  ,{ new: true, upsert: true} ) 
-          .then(updatedPerson => {
-
-            console.log('updated/created', updatedPerson)
-            response.json(updatedPerson.toJSON())
-              
-    }).catch(error => next(error))
+            console.log('created', createdPerson)
+            response.json(createdPerson.toJSON())
+          }).catch(error => next(error))
+          
 })
 
 // Update
